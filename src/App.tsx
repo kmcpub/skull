@@ -447,7 +447,7 @@ export default function App() {
         ${isLandscape ? 'flex-col w-[15vw] h-full border-r p-[1vw] justify-between' : 'flex-col h-[18vh] w-full border-b p-[1vh] justify-center gap-[1vh]'}
       `}>
         {/* Title Section (Row 1 in Portrait) */}
-        <div className={`flex items-center justify-center ${isLandscape ? 'flex-col w-full pt-[2vh]' : 'w-full pt-[2vh] mb-[1vh]'}`}>
+        <div className={`flex items-center justify-center ${isLandscape ? 'flex-col w-full pt-[2vh]' : 'w-full pt-[5vh] mb-[1vh]'}`}>
           <h1 
             className="font-nosifer text-red-600 tracking-tighter drop-shadow-[0_0_20px_rgba(255,0,0,0.8)] leading-none flex"
             style={{ 
@@ -464,7 +464,7 @@ export default function App() {
         <div className={`flex items-center ${isLandscape ? 'flex-col-reverse w-full gap-[2vh] justify-end pb-[2vh]' : 'flex-row w-full justify-between px-[4vw] items-center'}`}>
           
           {/* Buttons Group (Bottom-most in Landscape) */}
-          <div className={`flex ${isLandscape ? 'flex-row justify-center w-[90%] gap-[0.8vw]' : 'flex-row gap-[2vw]'}`}>
+          <div className={`flex ${isLandscape ? 'flex-row justify-center w-[90%] gap-[0.8vw]' : 'flex-row gap-[1.5vw]'} ${!isLandscape ? 'order-3' : 'order-1'}`}>
             {[
               { icon: RefreshCw, onClick: initGame, title: '재시작' },
               { icon: Settings, onClick: () => setShowSettings(true), title: '설정' },
@@ -477,10 +477,10 @@ export default function App() {
                 className="bg-gray-900/80 border-2 border-gray-700 rounded-[1vw] hover:bg-red-900/50 transition-all text-gray-400 hover:text-red-500 shadow-lg flex items-center justify-center aspect-square"
                 style={{ 
                   padding: isLandscape ? '0.8vw' : '1vh',
-                  width: isLandscape ? '28%' : '10vw',
+                  width: isLandscape ? '28%' : '8.5vw',
                 }}
               >
-                <btn.icon size={isLandscape ? windowSize.width * 0.015 : windowSize.height * 0.025} />
+                <btn.icon size={isLandscape ? windowSize.width * 0.015 : windowSize.height * 0.022} />
               </button>
             ))}
           </div>
@@ -488,21 +488,22 @@ export default function App() {
           {/* Timer Group (Above Buttons in Landscape) */}
           {config.timerEnabled && !gameOver && !gameWon && (
             <div 
-              className="flex items-center gap-[1vw] bg-black/80 border-2 border-red-900/60 rounded-[2vw] shadow-[0_0_20px_rgba(153,27,27,0.4)] justify-center"
+              className={`flex items-center gap-[1vw] bg-black/80 border-2 border-red-900/60 rounded-[2vw] shadow-[0_0_20px_rgba(153,27,27,0.4)] justify-between ${!isLandscape ? 'order-1' : 'order-2'}`}
               style={{ 
-                width: isLandscape ? '90%' : 'auto',
-                padding: isLandscape ? '0.8vh 1vw' : '0.5vh 2vw'
+                width: isLandscape ? '90%' : '28.5vw',
+                height: isLandscape ? 'auto' : '8.5vw',
+                padding: isLandscape ? '0.8vh 1.5vw' : '0 2vw'
               }}
             >
-              <Timer className={timeLeft <= 3 ? 'text-red-500 animate-ping' : 'text-gray-400'} size={isLandscape ? windowSize.width * 0.015 : windowSize.height * 0.03} />
+              <Timer className={timeLeft <= 3 ? 'text-red-500 animate-ping' : 'text-gray-400'} size={isLandscape ? windowSize.width * 0.015 : windowSize.height * 0.025} />
               <span 
                 className={`font-mono font-bold tabular-nums ${timeLeft <= 3 ? 'text-red-500' : 'text-gray-200'}`}
-                style={{ fontSize: isLandscape ? '2.5vw' : '3.5vh' }}
+                style={{ fontSize: isLandscape ? '2.5vw' : '4vw' }}
               >
                 {timeLeft}
               </span>
-              <button onClick={() => setIsPaused(!isPaused)} className="text-gray-400 hover:text-white transition-colors">
-                {isPaused ? <Play size={isLandscape ? windowSize.width * 0.012 : windowSize.height * 0.02} /> : <Pause size={isLandscape ? windowSize.width * 0.012 : windowSize.height * 0.02} />}
+              <button onClick={() => setIsPaused(!isPaused)} className="text-gray-400 hover:text-white transition-colors flex items-center justify-center">
+                {isPaused ? <Play size={isLandscape ? windowSize.width * 0.012 : windowSize.height * 0.018} /> : <Pause size={isLandscape ? windowSize.width * 0.012 : windowSize.height * 0.018} />}
               </button>
             </div>
           )}
@@ -510,8 +511,11 @@ export default function App() {
           {/* Current Turn Info (Top-most in this section in Landscape) */}
           {(config.timerEnabled || config.showTurnHighlight) && !gameOver && !gameWon && (
             <div 
-              className="text-red-600 font-horror-kr animate-pulse whitespace-nowrap"
-              style={{ fontSize: isLandscape ? `${cardSize * 0.55}px` : '3vh' }}
+              className={`text-red-600 font-horror-kr animate-pulse whitespace-nowrap flex items-center ${!isLandscape ? 'order-2 flex-1 ml-[3vw]' : 'order-3'}`}
+              style={{ 
+                fontSize: isLandscape ? `${cardSize * 0.55}px` : '8.5vw',
+                height: isLandscape ? 'auto' : '8.5vw'
+              }}
             >
               {config.rowNames[currentTurnRow]}
             </div>
