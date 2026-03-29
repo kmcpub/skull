@@ -444,10 +444,10 @@ export default function App() {
       
       {/* Sidebar (Landscape) / Header (Portrait) */}
       <div className={`z-30 flex border-red-900/20 bg-black/60 backdrop-blur-md items-center
-        ${isLandscape ? 'flex-col w-[15vw] h-full border-r p-[1vw] justify-between' : 'flex-col h-[18vh] w-full border-b p-[1vh] justify-center gap-[1vh]'}
+        ${isLandscape ? 'flex-col w-[15vw] h-full border-r p-[1vw] justify-between' : 'flex-col h-[20vh] w-full border-b p-[1vh] justify-center gap-[1vh]'}
       `}>
         {/* Title Section (Row 1 in Portrait) */}
-        <div className={`flex items-center justify-center ${isLandscape ? 'flex-col w-full pt-[2vh]' : 'w-full pt-[5vh] mb-[1vh]'}`}>
+        <div className={`flex items-center justify-center ${isLandscape ? 'flex-col w-full pt-[2vh]' : 'w-full pt-0 mb-[1vh]'}`}>
           <h1 
             className="font-nosifer text-red-600 tracking-tighter drop-shadow-[0_0_20px_rgba(255,0,0,0.8)] leading-none flex"
             style={{ 
