@@ -37,6 +37,7 @@ const DEFAULT_CONFIG: Config = {
 
 // --- Audio System ---
 let audioCtx: AudioContext | null = null;
+let skullNoiseBuffer: AudioBuffer | null = null;
 
 const initAudio = () => {
   if (!audioCtx) {
@@ -44,6 +45,14 @@ const initAudio = () => {
   }
   if (audioCtx.state === 'suspended') {
     audioCtx.resume();
+  }
+  
+  // Pre-generate skull noise buffer if not already done
+  if (audioCtx && !skullNoiseBuffer) {
+    const bufferSize = audioCtx.sampleRate * 1.5;
+    skullNoiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+    const data = skullNoiseBuffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
   }
 };
 
@@ -65,13 +74,10 @@ const playSafeSound = () => {
 
 const playSkullSound = () => {
   initAudio();
-  if (!audioCtx) return;
-  const bufferSize = audioCtx.sampleRate * 1.5;
-  const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
-  const data = buffer.getChannelData(0);
-  for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+  if (!audioCtx || !skullNoiseBuffer) return;
+  
   const noise = audioCtx.createBufferSource();
-  noise.buffer = buffer;
+  noise.buffer = skullNoiseBuffer;
   const filter = audioCtx.createBiquadFilter();
   filter.type = 'lowpass';
   filter.frequency.setValueAtTime(1200, audioCtx.currentTime);
@@ -83,6 +89,7 @@ const playSkullSound = () => {
   filter.connect(gain);
   gain.connect(audioCtx.destination);
   noise.start();
+  
   const osc = audioCtx.createOscillator();
   const oscGain = audioCtx.createGain();
   osc.type = 'sawtooth';
@@ -133,13 +140,13 @@ const playTickSound = (secondsLeft: number) => {
 
 // --- Components ---
 
-const ThickX = () => (
+const ThickX = React.memo(() => (
   <svg viewBox="0 0 100 100" className="w-full h-full p-3 text-red-700 drop-shadow-[0_0_8px_rgba(255,0,0,0.9)]">
     <path d="M20,20 L80,80 M80,20 L20,80" stroke="currentColor" strokeWidth="24" strokeLinecap="round" />
   </svg>
-);
+));
 
-const ScarierSkull = () => (
+const ScarierSkull = React.memo(() => (
   <svg viewBox="0 0 100 100" className="w-full h-full p-1 text-white drop-shadow-[0_0_15px_rgba(255,0,0,0.8)]">
     <path d="M50,5 C20,5 10,30 10,50 C10,65 20,75 30,90 L70,90 C80,75 90,65 90,50 C90,30 80,5 50,5 Z" fill="#1a1a1a" stroke="#444" strokeWidth="2" />
     {/* Glowing Eyes */}
@@ -162,7 +169,74 @@ const ScarierSkull = () => (
     {/* Cracks */}
     <path d="M50,5 L55,15 M20,30 L30,35" stroke="#333" strokeWidth="2" />
   </svg>
-);
+));
+
+interface CellProps {
+  cell: CellData;
+  cardSize: number;
+  currentTurnRow: number;
+  gameOver: boolean;
+  gameWon: boolean;
+  config: Config;
+  onClick: (r: number, c: number) => void;
+  onAnimationComplete: (r: number, c: number) => void;
+}
+
+const Cell = React.memo(({ cell, cardSize, currentTurnRow, gameOver, gameWon, config, onClick, onAnimationComplete }: CellProps) => {
+  const isRowActive = (config.timerEnabled || config.showTurnHighlight) && currentTurnRow !== cell.r && !gameOver && !gameWon;
+  
+  return (
+    <div 
+      onClick={() => onClick(cell.r, cell.c)}
+      style={{
+        width: `${cardSize}px`,
+        height: `${cardSize}px`,
+      }}
+      className={`relative rounded-[10%] flex items-center justify-center transition-all duration-200 border-2 border-gray-800/50
+        ${!cell.isRevealed ? 'maze-bg hover:scale-105 hover:border-red-500 shadow-xl cursor-pointer' : cell.isSkull ? 'revealed-skull cursor-default' : 'revealed-safe cursor-default'}
+        ${isRowActive ? 'pointer-events-none opacity-75' : ''}
+      `}
+    >
+      <AnimatePresence>
+        {!cell.isRevealed ? (
+          <motion.span 
+            key="num" 
+            exit={{ opacity: 0, scale: 0.5 }} 
+            transition={{ duration: 0.15 }}
+            className="font-horror-kr text-gray-600 drop-shadow-sm origin-center"
+            style={{ fontSize: `${cardSize * 0.5}px` }}
+          >
+            {cell.c + 1}
+          </motion.span>
+        ) : cell.isSkull ? (
+          <motion.div 
+            key="skull" 
+            initial={{ scale: 0, rotate: -180 }} 
+            animate={{ scale: 1, rotate: 0 }} 
+            transition={{ duration: 0.2, ease: "easeOut" }} 
+            style={{ originX: 0.5, originY: 0.5 }}
+            className="w-full h-full"
+            onAnimationComplete={() => onAnimationComplete(cell.r, cell.c)}
+          >
+            <ScarierSkull />
+          </motion.div>
+        ) : (
+          <motion.div 
+            key="x" 
+            initial={{ scale: 0, rotate: -90 }} 
+            animate={{ scale: 1, rotate: 0 }} 
+            transition={{ duration: 0.2, ease: "easeOut" }} 
+            style={{ originX: 0.5, originY: 0.5 }}
+            className="w-full h-full"
+            onAnimationComplete={() => onAnimationComplete(cell.r, cell.c)}
+          >
+            <ThickX />
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+});
 
 export default function App() {
   // --- State ---
@@ -196,40 +270,47 @@ export default function App() {
   const [isInitialized, setIsInitialized] = useState(false);
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const resizeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Track window size for real-time relative scaling
   const [windowSize, setWindowSize] = useState({ width: window.innerWidth, height: window.innerHeight });
 
   useEffect(() => {
-    const handleResize = () => setWindowSize({ width: window.innerWidth, height: window.innerHeight });
+    const handleResize = () => {
+      if (resizeTimeoutRef.current) return;
+      resizeTimeoutRef.current = setTimeout(() => {
+        setWindowSize({ width: window.innerWidth, height: window.innerHeight });
+        resizeTimeoutRef.current = null;
+      }, 100); // Throttle to 10fps during resize
+    };
     window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      if (resizeTimeoutRef.current) clearTimeout(resizeTimeoutRef.current);
+    };
   }, []);
 
   const isLandscape = windowSize.width > windowSize.height;
   
-  // Available space for the game board (excluding sidebar/header)
-  // Sidebar is 15vw in landscape. Header is 18vh in portrait.
-  const margin = 20; // Safety margin in pixels
-  const availableWidth = isLandscape 
-    ? windowSize.width - (windowSize.width * 0.15) - margin 
-    : windowSize.width - margin;
-  const availableHeight = isLandscape 
-    ? windowSize.height - margin 
-    : windowSize.height - (windowSize.height * 0.18) - margin;
+  // Layout calculations memoized for performance
+  const layout = React.useMemo(() => {
+    const margin = 20;
+    const availableWidth = isLandscape 
+      ? windowSize.width - (windowSize.width * 0.15) - margin 
+      : windowSize.width - margin;
+    const availableHeight = isLandscape 
+      ? windowSize.height - margin 
+      : windowSize.height - (windowSize.height * 0.20) - margin;
 
-  // Relative gap size (0.5% of the primary dimension)
-  const gapSize = isLandscape ? windowSize.height * 0.005 : windowSize.width * 0.005;
+    const gapSize = isLandscape ? windowSize.height * 0.005 : windowSize.width * 0.005;
+    const cardSizeW = (availableWidth - config.cols * gapSize) / (config.cols + 1);
+    const cardSizeH = (availableHeight - (config.rows - 1) * gapSize) / config.rows;
+    const cardSize = Math.max(10, Math.min(cardSizeW, cardSizeH));
 
-  // The "card set" is a rectangle containing (config.cols + 1) columns and config.rows rows.
-  // Total Width = (config.cols + 1) * cardSize + config.cols * gapSize
-  // Total Height = config.rows * cardSize + (config.rows - 1) * gapSize
-  
-  const cardSizeW = (availableWidth - config.cols * gapSize) / (config.cols + 1);
-  const cardSizeH = (availableHeight - (config.rows - 1) * gapSize) / config.rows;
-  
-  // Maximize card size without clipping (min of constraints)
-  const cardSize = Math.max(10, Math.min(cardSizeW, cardSizeH));
+    return { cardSize, gapSize };
+  }, [windowSize, config.rows, config.cols, isLandscape]);
+
+  const { cardSize, gapSize } = layout;
 
   // Persistence
   useEffect(() => {
@@ -582,56 +663,17 @@ export default function App() {
               {/* Cards Columns */}
               <div className="flex flex-nowrap justify-center" style={{ gap: `${gapSize}px` }}>
                 {row.map((cell) => (
-                  <div 
+                  <Cell 
                     key={cell.id}
-                    onClick={() => handleCellClick(cell.r, cell.c)}
-                    style={{
-                      width: `${cardSize}px`,
-                      height: `${cardSize}px`,
-                    }}
-                    className={`relative rounded-[10%] flex items-center justify-center transition-all duration-200 border-2 border-gray-800/50
-                      ${!cell.isRevealed ? 'maze-bg hover:scale-105 hover:border-red-500 shadow-xl cursor-pointer' : cell.isSkull ? 'revealed-skull cursor-default' : 'revealed-safe cursor-default'}
-                      ${(config.timerEnabled || config.showTurnHighlight) && currentTurnRow !== r && !gameOver && !gameWon ? 'pointer-events-none opacity-75' : ''}
-                    `}
-                  >
-                    <AnimatePresence>
-                      {!cell.isRevealed ? (
-                        <motion.span 
-                          key="num" 
-                          exit={{ opacity: 0, scale: 0.5 }} 
-                          transition={{ duration: 0.15 }}
-                          className="font-horror-kr text-gray-600 drop-shadow-sm origin-center"
-                          style={{ fontSize: `${cardSize * 0.5}px` }}
-                        >
-                          {cell.c + 1}
-                        </motion.span>
-                      ) : cell.isSkull ? (
-                        <motion.div 
-                          key="skull" 
-                          initial={{ scale: 0, rotate: -180 }} 
-                          animate={{ scale: 1, rotate: 0 }} 
-                          transition={{ duration: 0.2, ease: "easeOut" }} 
-                          style={{ originX: 0.5, originY: 0.5 }}
-                          className="w-full h-full"
-                          onAnimationComplete={() => handleAnimationComplete(cell.r, cell.c)}
-                        >
-                          <ScarierSkull />
-                        </motion.div>
-                      ) : (
-                        <motion.div 
-                          key="x" 
-                          initial={{ scale: 0, rotate: -90 }} 
-                          animate={{ scale: 1, rotate: 0 }} 
-                          transition={{ duration: 0.2, ease: "easeOut" }} 
-                          style={{ originX: 0.5, originY: 0.5 }}
-                          className="w-full h-full"
-                          onAnimationComplete={() => handleAnimationComplete(cell.r, cell.c)}
-                        >
-                          <ThickX />
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
+                    cell={cell}
+                    cardSize={cardSize}
+                    currentTurnRow={currentTurnRow}
+                    gameOver={gameOver}
+                    gameWon={gameWon}
+                    config={config}
+                    onClick={handleCellClick}
+                    onAnimationComplete={handleAnimationComplete}
+                  />
                 ))}
               </div>
             </motion.div>
@@ -682,10 +724,10 @@ export default function App() {
                 </div>
                 
                 <div className="flex flex-col gap-1">
-                  <label>게임 모드</label>
+                  <label>게임 오버 설정</label>
                   <div className="flex gap-2">
-                    <button onClick={() => setConfig({...config, gameMode: 'immediate'})} className={`flex-1 py-1 rounded border transition-colors ${config.gameMode === 'immediate' ? 'bg-red-900 border-red-500' : 'bg-gray-800 border-gray-700 hover:bg-gray-700'}`}>바로</button>
-                    <button onClick={() => setConfig({...config, gameMode: 'endOfRound'})} className={`flex-1 py-1 rounded border transition-colors ${config.gameMode === 'endOfRound' ? 'bg-red-900 border-red-500' : 'bg-gray-800 border-gray-700 hover:bg-gray-700'}`}>끝까지</button>
+                    <button onClick={() => setConfig({...config, gameMode: 'immediate'})} className={`flex-1 py-1 rounded border transition-colors ${config.gameMode === 'immediate' ? 'bg-red-900 border-red-500' : 'bg-gray-800 border-gray-700 hover:bg-gray-700'}`}>최초 발견 시</button>
+                    <button onClick={() => setConfig({...config, gameMode: 'endOfRound'})} className={`flex-1 py-1 rounded border transition-colors ${config.gameMode === 'endOfRound' ? 'bg-red-900 border-red-500' : 'bg-gray-800 border-gray-700 hover:bg-gray-700'}`}>모두 누른 뒤</button>
                   </div>
                 </div>
 
@@ -702,7 +744,7 @@ export default function App() {
                 )}
 
                 <div className="flex items-center justify-between">
-                  <label>해당 턴 강조</label>
+                  <label>현재 턴 강조</label>
                   <input type="checkbox" checked={config.showTurnHighlight} onChange={e => setConfig({...config, showTurnHighlight: e.target.checked})} className="w-5 h-5 accent-red-600" />
                 </div>
 
